@@ -1,0 +1,30 @@
+# Stored uploads. This directory is local state, not source: it is where
+# --dir points by default and it can hold tens of gigabytes of video.
+uploads/
+
+# Test harness lives in test_scripts/ and IS published -- it drives the real
+# HTTP surface and the real client JS with no mocks, and the reality suite is
+# the only proof that a severed chunk no longer kills an upload.
+
+# Scratch space for the reality test (regenerated on demand, ~130 MiB).
+test_scripts/testfiles/
+
+# Assorted stray test droppings from earlier manual runs.
+test/
+
+# Python bytecode / packaging
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# Temporary assembly files. A crash mid-join can leave these behind; they are
+# safe to delete when no upload is in flight.
+*.assembling-*
+
+# Editors / OS
+.DS_Store
+.idea/
+.vscode/
+*.swp

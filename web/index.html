@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex,nofollow">
+<title>dropzone</title>
+<link rel="icon" href="/icon.png" type="image/png">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="description" content="Resumable chunked file upload. Sends a file as many small requests, so it works past a proxy's 100 MB request ceiling and survives a dropped connection.">
+<meta name="theme-color" content="#08090c">
+
+<!-- Open Graph / Twitter card. __OG_URL__ and __OG_IMAGE__ are replaced with
+     absolute URLs derived from the request's Host and scheme at serve time,
+     because every platform that unfurls a link requires absolute URLs.
+     Unfurlers fetch the page directly and ignore the noindex above, so a
+     shared link still gets a card while the page stays out of search. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="dropzone">
+<meta property="og:title" content="dropzone">
+<meta property="og:description" content="Resumable chunked file upload. Works past a proxy's 100 MB request ceiling and survives a dropped connection.">
+<meta property="og:url" content="__OG_URL__">
+<meta property="og:image" content="__OG_IMAGE__">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="dropzone — resumable chunked file upload">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="dropzone">
+<meta name="twitter:description" content="Resumable chunked file upload. Works past a proxy's 100 MB request ceiling and survives a dropped connection.">
+<meta name="twitter:image" content="__OG_IMAGE__">
+
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="bg-rain a" aria-hidden="true"></div>
+<div class="bg-rain b" aria-hidden="true"></div>
+<div class="bg-sweep" aria-hidden="true"></div>
+<div class="grain" aria-hidden="true"></div>
+
+<div id="gate" hidden>
+  <form class="card" id="gateform">
+    <h2>Access key required</h2>
+    <p>This endpoint is public. Enter the shared key to upload.</p>
+    <input type="password" id="gatekey" placeholder="key" autocomplete="current-password" autofocus>
+    <button type="submit">Unlock</button>
+    <p id="gateerr" hidden></p>
+  </form>
+</div>
+
+<header>
+  <div class="brand">
+    <span class="mark" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    </span>
+    <h1>dropzone <span>upload anything</span></h1>
+  </div>
+  <div class="chips">
+    <span class="chip" id="c_mode">&nbsp;</span>
+    <span class="chip" id="c_chunk">&nbsp;</span>
+    <span class="chip" id="c_max">&nbsp;</span>
+    <span class="chip" id="c_stored">&nbsp;</span>
+  </div>
+</header>
+
+<main>
+  <div id="live" hidden>
+    <div class="liverow">
+      <span class="live-i" id="lv_dot" aria-hidden="true"></span>
+      <span class="live-t" id="lv_speed">&mdash;</span>
+      <span class="live-d" id="lv_up"></span>
+      <span class="live-d" id="lv_stored"></span>
+      <span class="live-d" id="lv_files"></span>
+      <span class="live-sp"></span>
+      <span class="live-d" id="lv_uptime"></span>
+    </div>
+    <div class="quota" id="lv_quota" hidden><i></i></div>
+  </div>
+
+  <div id="drop">
+    <span class="glyph" aria-hidden="true">
+      <svg viewBox="0 0 24 24"><path d="M12 16V4m0 0L7.5 8.5M12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></svg>
+    </span>
+    <h2 id="droptitle">Drop files here</h2>
+    <p id="dropsub">or choose below &middot; resumable &middot; no Cloudflare size ceiling</p>
+    <div class="btns">
+      <button type="button" id="pick" class="primary">Choose files</button>
+      <button type="button" id="cam">Take photo / video</button>
+    </div>
+    <p class="tiny">On a phone you can also paste a photo straight into the page.</p>
+  </div>
+
+  <div id="overall">
+    <div class="row">
+      <span class="nm lbl" id="ov_lbl"></span>
+      <span class="sub" id="ov_sub"></span>
+    </div>
+    <div class="bar"><i></i></div>
+    <div class="act" id="ov_act" hidden><button type="button" id="retryall">Retry failed</button></div>
+  </div>
+
+  <ul id="list" aria-live="polite"></ul>
+  <p class="qlabel" id="qlabel" hidden>Uploading from this device</p>
+  <input type="file" id="picker" multiple hidden>
+  <input type="file" id="camfile" accept="image/*,video/*" capture="environment" hidden>
+  <input type="file" id="camimg" accept="image/*" capture="environment" hidden>
+
+  <!-- Two audiences share this one page: whoever runs the server, and
+       whoever was sent the link. The queue above is always "uploads started
+       in THIS browser"; this section is always "uploads from somewhere else".
+       The two are kept disjoint on purpose -- a session never appears in
+       both, so the owner never sees their own file listed twice. -->
+  <section id="secin">
+    <div class="sechead">
+      <h3>Incoming</h3>
+      <span class="hint" id="xferhint"></span>
+    </div>
+    <ul id="xfers"></ul>
+  </section>
+
+  <section id="secfiles">
+    <div class="sechead">
+      <h3>On this server</h3>
+      <span class="hint" id="fileshint"></span>
+    </div>
+    <ul id="files"></ul>
+  </section>
+
+  <section id="sechow">
+    <div class="sechead"><h3>How it works</h3></div>
+    <ol class="steps">
+      <li><span><b>Split</b>Your browser cuts the file into <span id="how_chunk">small</span> pieces and sends them as separate requests, so no single request approaches a proxy&rsquo;s body limit.</span></li>
+      <li><span><b>Send</b><span id="how_par">A couple of pieces go</span> at once. A piece that fails is retried on its own instead of restarting the file.</span></li>
+      <li><span><b>Verify</b>The server checks the total size and computes a SHA-256 before publishing anything.</span></li>
+      <li><span><b>Keep the link</b>Progress is tracked per piece, so a dropped connection, a reload, or a backgrounded tab costs you nothing.</span></li>
+    </ol>
+  </section>
+
+  <section id="secdetails">
+    <details>
+      <summary><span class="plus" aria-hidden="true">+</span>Limits, endpoints &amp; notes</summary>
+      <div class="dbody">
+        <h4>This deployment</h4>
+        <table id="limitsTable"></table>
+        <h4>Endpoints</h4>
+        <table>
+          <tr><td>POST /api/auth</td><td>exchange the key for a cookie</td></tr>
+          <tr><td>POST /api/init</td><td>open a chunked upload, get an id</td></tr>
+          <tr><td>PUT /api/chunk/&lt;id&gt;/&lt;n&gt;</td><td>store one chunk</td></tr>
+          <tr><td>GET /api/chunk/&lt;id&gt;</td><td>which chunks are still missing</td></tr>
+          <tr><td>POST /api/finish</td><td>verify size + hash, join into place</td></tr>
+          <tr><td>DELETE /api/chunk/&lt;id&gt;</td><td>discard a partial upload</td></tr>
+          <tr><td>POST /api/upload</td><td>plain multipart, for small files and scripts</td></tr>
+          <tr><td>GET /api/list</td><td>stored files as JSON</td></tr>
+          <tr><td>GET /d/&lt;name&gt;</td><td>download, Range-enabled</td></tr>
+          <tr><td>GET /healthz</td><td>unauthenticated liveness probe</td></tr>
+        </table>
+        <h4>Worth knowing</h4>
+        <ul>
+          <li>One shared key protects everything. There are no per-user accounts, and anyone holding the key can read every stored file.</li>
+          <li>Files are written to a plain directory and kept until you delete them. No scanning, no expiry, no versioning.</li>
+          <li>Partial uploads are reaped after 6 hours of inactivity.</li>
+          <li>Sessions live in memory, so a restart abandons in-flight uploads. Finished files are untouched.</li>
+          <li>Downloads are forced to <code>attachment</code> unless the type is an image, video, audio or PDF, so an uploaded <code>.html</code> cannot run on this origin.</li>
+          <li>Meant to sit behind a tunnel or reverse proxy that terminates TLS. Bound to loopback by default.</li>
+        </ul>
+        <p id="srcline" style="margin:0"></p>
+      </div>
+    </details>
+  </section>
+</main>
+
+<footer>
+  <span id="limits"></span>
+  <span id="conn"></span>
+</footer>
+
+<!-- The config blob must precede the script below: app.js reads this node
+     synchronously, and the HTML parser has not created any element after this
+     point yet. (The string "app.js" also appears in the tag below.) -->
+<script id="cfg" type="application/json">__CONFIG__</script>
+<script src="/app.js"></script>
+</body>
+</html>

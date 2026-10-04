@@ -1,0 +1,416 @@
+/* ==================================================================
+     dropzone -- self-contained design system.
+
+     Motion budget (MOTION_INTENSITY ~6): every animation here is
+     transform/opacity only, and all of them collapse to static under
+     prefers-reduced-motion. Nothing animates on a timer just to look
+     busy -- each one either reports state (progress, drag target,
+     success) or confirms an action (copy, retry, unlock).
+     ================================================================== */
+  :root{
+    --bg:#08090c; --bg-2:#0b0d11;
+    --panel:#111419; --panel-2:#151920;
+    --line:#232833; --line-2:#2e3542;
+    --fg:#e9ecf1; --fg-2:#c3cad6; --dim:#8a93a3; --dim-2:#646d7d;
+    --acc:#4d8dff; --acc-2:#7aa9ff; --acc-ink:#04101f;
+    --ok:#2ee6a8; --err:#ff6b81;
+    --r-sm:9px; --r-md:13px; --r-lg:20px; --r-pill:999px;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 8px 24px -8px rgba(0,0,0,.6);
+    --shadow-lg:0 2px 4px rgba(0,0,0,.4), 0 24px 60px -16px rgba(0,0,0,.75);
+    --mono:ui-monospace,SFMono-Regular,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:"Inter var",Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+    --ease:cubic-bezier(.16,1,.3,1);
+    --ease-out:cubic-bezier(.2,.8,.3,1);
+    --dur:.32s;
+  }
+  @media (prefers-color-scheme:light){
+    :root{
+      --bg:#f7f8fa; --bg-2:#ffffff;
+      --panel:#ffffff; --panel-2:#fbfcfd;
+      --line:#e4e7ec; --line-2:#d3d8e0;
+      --fg:#10141b; --fg-2:#39414f; --dim:#5f6878; --dim-2:#8b95a5;
+      --acc:#1f6feb; --acc-2:#4d8dff; --acc-ink:#ffffff;
+      --ok:#0aa876; --err:#e0364f;
+      --shadow:0 1px 2px rgba(16,24,40,.06), 0 8px 24px -10px rgba(16,24,40,.14);
+      --shadow-lg:0 2px 4px rgba(16,24,40,.06), 0 24px 56px -18px rgba(16,24,40,.2);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  html{-webkit-text-size-adjust:100%}
+  body{margin:0;background:var(--bg);color:var(--fg);
+    font:15px/1.55 var(--sans);-webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;position:relative;isolation:isolate;
+    display:flex;flex-direction:column;overflow-x:hidden}
+
+  /* Ambient depth: two slow, offset radial washes. Fixed + pointer-events
+     none so they never repaint on scroll (see performance notes). */
+  body::before,body::after{content:'';position:fixed;z-index:-1;pointer-events:none;
+    border-radius:50%;filter:blur(90px);opacity:.5}
+  body::before{width:min(760px,90vw);height:min(520px,60vh);top:-16vh;left:-10vw;
+    background:radial-gradient(circle,color-mix(in srgb,var(--acc) 26%,transparent),transparent 68%);
+    animation:drift-a 26s var(--ease) infinite alternate}
+  body::after{width:min(620px,80vw);height:min(460px,54vh);bottom:-14vh;right:-8vw;
+    background:radial-gradient(circle,color-mix(in srgb,var(--ok) 13%,transparent),transparent 66%);
+    animation:drift-b 32s var(--ease) infinite alternate}
+  @keyframes drift-a{to{transform:translate3d(7vw,5vh,0) scale(1.14)}}
+  @keyframes drift-b{to{transform:translate3d(-6vw,-4vh,0) scale(1.1)}}
+
+  /* ---------------------------------------------------------------
+     Ambient data-rain.
+
+     Two layers of faint bars drifting downward at different speeds, so
+     the eye reads depth/parallax. Deliberately NOT a <canvas> loop: a
+     canvas would repaint every frame, and the whole point of this page
+     is that it is usually busy saturating a phone's uplink with a
+     multi-gigabyte upload. These animate purely with `transform` on a
+     fixed layer, which the compositor handles without touching the main
+     thread or re-rasterising anything.
+
+     The tile is a static SVG of scattered bars in the accent colour --
+     abstract data, not literal falling glyphs. The vertical loop is
+     seamless because the layer translates by exactly one tile height
+     (236px) and the tile itself repeats at that period.
+     --------------------------------------------------------------- */
+  .bg-rain{position:fixed;top:-160px;left:0;right:0;height:calc(100vh + 320px);
+    z-index:-1;pointer-events:none;
+    background-repeat:repeat;background-size:118px 236px;
+    -webkit-mask-image:radial-gradient(125% 85% at 50% -5%,#000 0%,rgba(0,0,0,.42) 48%,transparent 82%);
+    mask-image:radial-gradient(125% 85% at 50% -5%,#000 0%,rgba(0,0,0,.42) 48%,transparent 82%)}
+  .bg-rain.a{opacity:.5;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='118' height='236'%3E%3Cg fill='%234d8dff'%3E%3Crect x='9' y='6' width='2' height='15' opacity='.5'/%3E%3Crect x='27' y='34' width='2' height='8' opacity='.26'/%3E%3Crect x='44' y='15' width='2' height='21' opacity='.4'/%3E%3Crect x='62' y='52' width='2' height='11' opacity='.2'/%3E%3Crect x='79' y='28' width='2' height='17' opacity='.44'/%3E%3Crect x='98' y='66' width='2' height='9' opacity='.24'/%3E%3Crect x='16' y='88' width='2' height='19' opacity='.36'/%3E%3Crect x='35' y='112' width='2' height='7' opacity='.22'/%3E%3Crect x='52' y='96' width='2' height='24' opacity='.46'/%3E%3Crect x='71' y='130' width='2' height='12' opacity='.26'/%3E%3Crect x='88' y='108' width='2' height='16' opacity='.38'/%3E%3Crect x='107' y='142' width='2' height='10' opacity='.2'/%3E%3Crect x='7' y='166' width='2' height='13' opacity='.3'/%3E%3Crect x='25' y='192' width='2' height='20' opacity='.42'/%3E%3Crect x='43' y='172' width='2' height='9' opacity='.22'/%3E%3Crect x='60' y='206' width='2' height='17' opacity='.34'/%3E%3Crect x='78' y='184' width='2' height='7' opacity='.26'/%3E%3Crect x='95' y='214' width='2' height='14' opacity='.4'/%3E%3Crect x='113' y='190' width='2' height='11' opacity='.22'/%3E%3C/g%3E%3C/svg%3E");
+    animation:rain 9s linear infinite}
+  /* Offset horizontally and slowed, so the two layers never line up. */
+  .bg-rain.b{opacity:.3;margin-left:37px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='118' height='236'%3E%3Cg fill='%237aa9ff'%3E%3Crect x='14' y='22' width='2' height='10' opacity='.4'/%3E%3Crect x='33' y='58' width='2' height='19' opacity='.3'/%3E%3Crect x='51' y='38' width='2' height='8' opacity='.46'/%3E%3Crect x='69' y='76' width='2' height='14' opacity='.26'/%3E%3Crect x='88' y='48' width='2' height='22' opacity='.38'/%3E%3Crect x='106' y='92' width='2' height='9' opacity='.3'/%3E%3Crect x='20' y='124' width='2' height='16' opacity='.44'/%3E%3Crect x='39' y='150' width='2' height='7' opacity='.24'/%3E%3Crect x='57' y='132' width='2' height='21' opacity='.34'/%3E%3Crect x='76' y='168' width='2' height='11' opacity='.4'/%3E%3Crect x='94' y='144' width='2' height='18' opacity='.28'/%3E%3Crect x='112' y='182' width='2' height='8' opacity='.36'/%3E%3Crect x='11' y='204' width='2' height='13' opacity='.3'/%3E%3Crect x='30' y='228' width='2' height='7' opacity='.42'/%3E%3Crect x='48' y='212' width='2' height='17' opacity='.26'/%3E%3Crect x='67' y='234' width='2' height='10' opacity='.36'/%3E%3C/g%3E%3C/svg%3E");
+    animation:rain 15s linear infinite}
+  @keyframes rain{from{transform:translate3d(0,0,0)}to{transform:translate3d(0,-236px,0)}}
+
+  /* A single slow sweep of light across the top, so the backdrop has one
+     clear moment of motion instead of uniform texture. */
+  .bg-sweep{position:fixed;top:0;left:0;right:0;height:60vh;z-index:-1;
+    pointer-events:none;opacity:.5;
+    background:linear-gradient(180deg,transparent,color-mix(in srgb,var(--acc) 9%,transparent),transparent);
+    -webkit-mask-image:linear-gradient(100deg,transparent 38%,#000 50%,transparent 62%);
+    mask-image:linear-gradient(100deg,transparent 38%,#000 50%,transparent 62%);
+    animation:sweep 19s var(--ease) infinite alternate}
+  @keyframes sweep{from{transform:translate3d(-38%,0,0)}to{transform:translate3d(38%,0,0)}}
+
+  /* During a transfer the backdrop steps back. Progress bars are the thing
+     the user is actually reading; decoration should not compete with them. */
+  body.busy .bg-rain,body.busy .bg-sweep{opacity:.18}
+  .bg-rain,.bg-sweep{transition:opacity .5s var(--ease)}
+
+  /* The rain is a dark-mode effect. In light mode the same bars read as dirt
+     on the page, so the page stays clean instead of looking broken. */
+  @media (prefers-color-scheme:light){ .bg-rain,.bg-sweep{display:none} }
+
+  /* Very subtle film grain. Masks the banding that big blurred gradients
+     produce on 8-bit displays. */
+  .grain{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.032;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E")}
+  @media (prefers-color-scheme:light){ .grain{opacity:.05} }
+
+  header,main,footer{position:relative;z-index:1;width:100%;max-width:920px;margin:0 auto}
+
+  /* ---------------------------------------------------------- header */
+  header{padding:26px 26px 0;display:flex;align-items:flex-start;justify-content:space-between;
+    gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:11px;min-width:0}
+  .mark{width:34px;height:34px;flex:0 0 auto;border-radius:10px;display:grid;place-items:center;
+    background:linear-gradient(145deg,var(--acc),color-mix(in srgb,var(--acc) 62%,var(--ok)));
+    box-shadow:0 4px 14px -4px color-mix(in srgb,var(--acc) 55%,transparent),inset 0 1px 0 rgba(255,255,255,.28)}
+  .mark svg{width:18px;height:18px;display:block}
+  .mark svg path{stroke:var(--acc-ink);stroke-width:2.1;stroke-linecap:round;stroke-linejoin:round;fill:none}
+  h1{margin:0;font:640 16px/1.25 var(--sans);letter-spacing:-.015em;display:flex;
+    align-items:baseline;gap:8px;flex-wrap:wrap}
+  h1 span{color:var(--dim);font-weight:450;font-size:13px;letter-spacing:0}
+  .chips{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{border:1px solid var(--line);border-radius:var(--r-pill);padding:3px 10px;
+    background:color-mix(in srgb,var(--panel) 74%,transparent);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);
+    color:var(--dim);font:11px/1.5 var(--mono);white-space:nowrap;
+    animation:chip-in .5s var(--ease) both}
+  .chip b{color:var(--fg);font-weight:600}
+  .chip:nth-child(1){animation-delay:.06s} .chip:nth-child(2){animation-delay:.12s}
+  .chip:nth-child(3){animation-delay:.18s} .chip:nth-child(4){animation-delay:.24s}
+  @keyframes chip-in{from{opacity:0;transform:translateY(-5px) scale(.94)}}
+
+  main{flex:1;padding:20px 26px 44px}
+
+  /* ------------------------------------------------------- live status
+     A single strip of live numbers above the drop zone. Present only while
+     the server is reporting movement, so a static page does not grow a row
+     of zeroes. */
+  #live{margin-bottom:16px;border:1px solid var(--line);border-radius:var(--r-md);
+    background:color-mix(in srgb,var(--panel) 88%,transparent);
+    -webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);overflow:hidden;
+    animation:chip-in .45s var(--ease) both}
+  #live[hidden]{display:none}
+  .liverow{display:flex;align-items:center;gap:12px;padding:9px 14px;flex-wrap:wrap}
+  .live-i{width:7px;height:7px;border-radius:50%;flex:0 0 auto;
+    background:var(--dim);transition:background .3s}
+  /* The dot breathes only while bytes are actually moving, which makes
+     "is anything happening?" answerable at a glance. */
+  #live.moving .live-i{background:var(--ok);animation:pulse 1.6s var(--ease) infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.45;transform:scale(.82)}}
+  .live-t{font:600 12.5px var(--mono);color:var(--fg);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .live-d{font:11.5px var(--mono);color:var(--dim);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  .live-sp{flex:1 1 auto;min-width:0}
+  .quota{height:2px;background:var(--line)}
+  .quota>i{display:block;height:100%;width:0;background:var(--acc);
+    transition:width .5s var(--ease)}
+  .quota.warn>i{background:var(--err)}
+  @media (max-width:680px){ .liverow{gap:9px;padding:9px 12px} .live-sp{display:none} }
+  footer{padding:0 26px 30px;display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;
+    color:var(--dim-2);font:11.5px var(--mono)}
+
+  /* ------------------------------------------------------- the dropzone
+     The one element that must never lose dominance: it is the first thing
+     in <main>, the tallest element, and the only saturated surface. */
+  #drop{position:relative;border-radius:var(--r-lg);padding:44px 24px;text-align:center;
+    background:linear-gradient(180deg,color-mix(in srgb,var(--panel) 92%,transparent),
+      color-mix(in srgb,var(--panel-2) 88%,transparent));
+    border:1.5px dashed var(--line-2);box-shadow:var(--shadow);
+    -webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);
+    transition:border-color var(--dur) var(--ease),transform var(--dur) var(--ease),
+      box-shadow var(--dur) var(--ease),background var(--dur) var(--ease);
+    animation:zone-in .6s var(--ease) both;overflow:hidden}
+  /* Marching-ants perimeter while a drag is over the zone. Reads as "this
+     is a target" far better than a colour swap alone. */
+  #drop::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+    background:repeating-linear-gradient(90deg,var(--acc) 0 13px,transparent 13px 26px);
+    -webkit-mask:linear-gradient(#000,#000) content-box,linear-gradient(#000,#000);
+    -webkit-mask-composite:xor;mask:linear-gradient(#000,#000) content-box,linear-gradient(#000,#000);
+    -webkit-mask-composite:xor;mask-composite:exclude;padding:1.5px;opacity:0;
+    transition:opacity .2s linear;background-size:26px 100%}
+  #drop.hot{border-color:transparent;transform:scale(1.014);
+    box-shadow:var(--shadow-lg),0 0 0 4px color-mix(in srgb,var(--acc) 13%,transparent)}
+  #drop.hot::before{opacity:.85;animation:ants .7s linear infinite}
+  @keyframes ants{to{background-position:26px 0}}
+  @keyframes zone-in{from{opacity:0;transform:translateY(10px) scale(.99)}}
+  #drop .glyph{width:60px;height:60px;margin:0 auto 18px;display:grid;place-items:center;
+    border-radius:var(--r-md);color:var(--acc);
+    background:color-mix(in srgb,var(--acc) 11%,transparent);
+    border:1px solid color-mix(in srgb,var(--acc) 22%,transparent);
+    transition:transform var(--dur) var(--ease)}
+  #drop .glyph svg{width:27px;height:27px;display:block}
+  #drop .glyph svg path,#drop .glyph svg line,#drop .glyph svg polyline{
+    stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;fill:none}
+  #drop.hot .glyph{transform:translateY(-3px) scale(1.06)}
+  #drop h2{margin:0 0 7px;font-size:20px;font-weight:640;letter-spacing:-.02em}
+  #drop p{margin:0;color:var(--dim);font-size:13.5px;max-width:46ch;
+    margin-inline:auto;line-height:1.5}
+  #drop .btns{display:flex;gap:10px;justify-content:center;margin-top:22px;flex-wrap:wrap}
+  #drop .tiny{margin-top:15px;font-size:11.5px;color:var(--dim-2)}
+  #drop .tiny kbd{font:11px var(--mono);border:1px solid var(--line-2);border-bottom-width:2px;
+    border-radius:5px;padding:1px 5px;background:var(--panel-2);color:var(--fg-2)}
+
+  /* ------------------------------------------------------- interactive */
+  button,input[type=password]{font:inherit;color:var(--fg);background:var(--panel);
+    border:1px solid var(--line-2);border-radius:var(--r-sm);padding:9px 16px;cursor:pointer;
+    transition:transform .14s var(--ease),border-color .18s,background .18s,box-shadow .18s,opacity .18s;
+    -webkit-tap-highlight-color:transparent}
+  button:hover:not(:disabled){border-color:var(--dim);background:var(--panel-2)}
+  button:active:not(:disabled){transform:translateY(1px) scale(.985)}
+  button:focus-visible,input:focus-visible,summary:focus-visible,a:focus-visible{
+    outline:2px solid var(--acc);outline-offset:2px}
+  button:disabled{opacity:.42;cursor:default}
+  button.primary{background:var(--acc);color:var(--acc-ink);border-color:transparent;font-weight:620;
+    box-shadow:0 1px 2px rgba(0,0,0,.2),0 8px 20px -8px color-mix(in srgb,var(--acc) 60%,transparent)}
+  button.primary:hover:not(:disabled){background:var(--acc-2);
+    box-shadow:0 1px 2px rgba(0,0,0,.2),0 12px 28px -10px color-mix(in srgb,var(--acc) 70%,transparent)}
+  a{color:var(--acc);text-decoration:none;font:12px var(--mono);
+    transition:color .16s}
+  a:hover{color:var(--acc-2);text-decoration:underline}
+
+  /* ----------------------------------------------------- aggregate bar */
+  #overall{display:none;margin-top:16px;padding:13px 15px;border:1px solid var(--line);
+    border-radius:var(--r-md);background:var(--panel);box-shadow:var(--shadow);
+    animation:chip-in .4s var(--ease) both}
+  #overall.on{display:block}
+  #overall .lbl{color:var(--fg);font-size:13px;font-weight:500}
+  #overall .sub{color:var(--dim);font:11.5px var(--mono);white-space:nowrap}
+
+  /* -------------------------------------------------------- the queue */
+  ul{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+  #list{margin-top:18px}
+  li{border:1px solid var(--line);border-radius:var(--r-md);padding:13px 15px;
+    background:var(--panel);box-shadow:var(--shadow);
+    animation:row-in .45s var(--ease) both;
+    transition:border-color .2s,background .2s}
+  @keyframes row-in{from{opacity:0;transform:translateY(9px) scale(.985)}}
+  li.done{border-color:color-mix(in srgb,var(--ok) 34%,var(--line));
+    background:color-mix(in srgb,var(--ok) 5%,var(--panel))}
+  li.err{border-color:color-mix(in srgb,var(--err) 38%,var(--line));
+    background:color-mix(in srgb,var(--err) 5%,var(--panel))}
+  .row{display:flex;align-items:baseline;gap:10px}
+  .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    font-size:14px;font-weight:500}
+  .sz{color:var(--dim);font:11.5px var(--mono);white-space:nowrap}
+
+  /* Progress: the bar grows from the left via transform, so it never
+     triggers layout. Colour is the only thing that crossfades. */
+  .bar{height:5px;background:var(--line);border-radius:var(--r-pill);margin-top:11px;
+    overflow:hidden;position:relative}
+  .bar>i{position:absolute;inset:0;transform-origin:left center;transform:scaleX(0);
+    background:linear-gradient(90deg,var(--acc),var(--acc-2));
+    transition:transform .24s var(--ease-out),background .3s}
+  li.done .bar>i{background:linear-gradient(90deg,var(--ok),color-mix(in srgb,var(--ok) 62%,var(--acc-2)))}
+  li.err .bar>i{background:var(--err)}
+  /* Sheen travels along the bar only while work is in flight. */
+  .bar::after{content:'';position:absolute;inset:0;pointer-events:none;opacity:0;
+    background:linear-gradient(90deg,transparent,color-mix(in srgb,var(--fg) 22%,transparent),transparent);
+    transform:translateX(-100%)}
+  li:not(.done):not(.err) .bar::after{opacity:1;animation:sheen 1.9s var(--ease-out) infinite}
+  @keyframes sheen{to{transform:translateX(100%)}}
+
+  .st{font:11.5px var(--mono);color:var(--dim);white-space:nowrap}
+  li.done .st{color:var(--ok)} li.err .st{color:var(--err)}
+  .act{display:flex;gap:7px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  .act button,.act a{padding:6px 11px;font-size:12px;border-radius:7px}
+  .sha{color:var(--dim-2);font:10.5px var(--mono);opacity:.8}
+
+  /* --------------------------------------------------------- sections */
+  section{margin-top:38px}
+  .sechead{display:flex;align-items:baseline;justify-content:space-between;gap:12px;
+    margin-bottom:11px}
+  .sechead h3{margin:0;font-size:12.5px;font-weight:620;letter-spacing:-.01em;color:var(--fg)}
+  .sechead .hint{color:var(--dim-2);font:11px var(--mono)}
+  #files{gap:6px}
+  #files li{display:flex;align-items:center;gap:12px;padding:10px 13px;border-radius:var(--r-sm);
+    box-shadow:none;background:var(--panel)}
+  #files li:hover{border-color:var(--line-2);background:var(--panel-2)}
+  #files .fn{flex:1;min-width:0;font:12.5px var(--mono);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  #files .fs{color:var(--dim);font:11px var(--mono);white-space:nowrap}
+  .empty{color:var(--dim);font-size:13px;padding:3px 0 0}
+
+  /* Roles, spelled out. One page serves two audiences, so the two transfer
+     lists name who they belong to rather than relying on position. */
+  .qlabel{margin:20px 0 0;color:var(--dim-2);font:11px var(--mono);
+    letter-spacing:.06em;text-transform:uppercase}
+  .qlabel[hidden]{display:none}
+  #list:empty + .qlabel{margin-top:0}
+
+  /* ---------------------------------------------------- incoming feed
+     The server owner's view of everything currently uploading. Compact on
+     purpose: this is ambient awareness sitting next to the sender's own
+     detailed queue above it, not a second copy of it. */
+  #secin{margin-top:34px}
+  #secin.idle{display:none}
+  #xfers{gap:7px}
+  #xfers li{padding:11px 13px;border-radius:var(--r-sm);box-shadow:none;
+    background:color-mix(in srgb,var(--acc) 4%,var(--panel));
+    border-color:color-mix(in srgb,var(--acc) 20%,var(--line))}
+  #xfers .top{display:flex;align-items:baseline;gap:10px}
+  #xfers .fn{flex:1;min-width:0;font:12.5px var(--mono);overflow:hidden;
+    text-overflow:ellipsis;white-space:nowrap}
+  #xfers .pct{color:var(--acc);font:11.5px var(--mono);white-space:nowrap;
+    font-variant-numeric:tabular-nums}
+  #xfers .sub{color:var(--dim);font:10.5px var(--mono);margin-top:6px;display:flex;
+    gap:10px;flex-wrap:wrap}
+  #xfers .bar{margin-top:8px;height:3px}
+  /* A transfer that has gone quiet gets a muted bar, so a stalled upload
+     reads as stalled rather than as slow progress. */
+  #xfers li.stalled .bar>i{background:var(--dim)}
+  #xfers li.stalled .pct{color:var(--dim)}
+
+  /* Numbered walkthrough. The counter lives in a bordered chip so the four
+     steps read as a sequence rather than a bullet list. */
+  .steps{list-style:none;counter-reset:st;margin:0;padding:0;
+    display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px 22px}
+  .steps li{display:flex;gap:12px;align-items:flex-start;font-size:13.5px;color:var(--dim);
+    line-height:1.55}
+  .steps li::before{counter-increment:st;content:counter(st);flex:0 0 auto;
+    width:22px;height:22px;margin-top:1px;display:grid;place-items:center;border-radius:7px;
+    background:color-mix(in srgb,var(--acc) 12%,transparent);
+    border:1px solid color-mix(in srgb,var(--acc) 24%,transparent);
+    color:var(--acc);font:600 11px/1 var(--mono)}
+  .steps b{color:var(--fg);font-weight:600;display:block;margin-bottom:2px}
+
+  /* Disclosure. The plus rotates 45deg to become a minus -- transform only. */
+  details{border:1px solid var(--line);border-radius:var(--r-md);background:var(--panel);
+    box-shadow:var(--shadow);overflow:hidden}
+  details>summary{cursor:pointer;padding:14px 16px;color:var(--fg-2);
+    font:600 12.5px var(--sans);display:flex;align-items:center;gap:10px;list-style:none;
+    transition:color .16s,background .16s}
+  details>summary:hover{color:var(--fg);background:var(--panel-2)}
+  details>summary::-webkit-details-marker{display:none}
+  details>summary .plus{color:var(--acc);font:400 15px/1 var(--mono);
+    transition:transform .28s var(--ease);display:inline-block}
+  details[open]>summary .plus{transform:rotate(45deg)}
+  details[open]>summary{border-bottom:1px solid var(--line)}
+  .dbody{padding:14px 16px 17px;font-size:13px;color:var(--dim);line-height:1.6}
+  .dbody h4{margin:15px 0 8px;font:600 11px var(--mono);letter-spacing:.07em;
+    text-transform:uppercase;color:var(--fg-2)}
+  .dbody h4:first-child{margin-top:0}
+  .dbody table{width:100%;border-collapse:collapse;font:11.5px var(--mono);margin:0 0 4px}
+  .dbody td{padding:4px 12px 4px 0;vertical-align:top}
+  .dbody td:first-child{color:var(--fg-2);white-space:nowrap;width:1%}
+  .dbody ul{margin:0;padding-left:17px;display:block;gap:0}
+  .dbody li{border:0;background:none;box-shadow:none;padding:0;margin:0 0 6px;
+    font-size:13px;color:var(--dim);animation:none}
+  .dbody li:last-child{margin-bottom:0}
+  .dbody code{color:var(--fg-2);font:11.5px var(--mono);
+    background:var(--bg-2);border:1px solid var(--line);border-radius:5px;padding:1px 5px}
+
+  /* ------------------------------------------------------------- gate */
+  #gate{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:24px;
+    background:color-mix(in srgb,var(--bg) 88%,transparent);
+    -webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);
+    animation:fade-in .3s var(--ease) both}
+  #gate[hidden]{display:none}
+  @keyframes fade-in{from{opacity:0}}
+  .card{width:100%;max-width:352px;border:1px solid var(--line);border-radius:var(--r-lg);
+    background:var(--panel);box-shadow:var(--shadow-lg);padding:26px;
+    animation:card-in .5s var(--ease) both}
+  @keyframes card-in{from{opacity:0;transform:translateY(14px) scale(.97)}}
+  .card h2{margin:0;font-size:17px;font-weight:640;letter-spacing:-.02em}
+  .card p{color:var(--dim);font-size:13px;margin:8px 0 16px;line-height:1.55}
+  .card input{width:100%;padding:11px 13px;margin-bottom:11px;background:var(--bg-2);
+    border-radius:var(--r-sm)}
+  .card button{width:100%;padding:11px;background:var(--acc);color:var(--acc-ink);
+    border-color:transparent;font-weight:620}
+  #gateerr{color:var(--err)!important;font-size:12.5px!important;margin:11px 0 0!important;
+    display:flex;align-items:center;gap:6px}
+  #gateerr::before{content:'';width:5px;height:5px;border-radius:50%;background:currentColor;
+    flex:0 0 auto}
+
+  /* ---------------------------------------------------------- mobile */
+  @media (max-width:680px){
+    header{padding:18px 16px 0;gap:12px}
+    .chips{width:100%}
+    main{padding:16px 16px 32px}
+    footer{padding:0 16px 22px;flex-direction:column;gap:7px}
+    #drop{padding:32px 18px}
+    #drop h2{font-size:18px}
+    .btns{flex-direction:column}
+    .btns button{width:100%;min-height:50px;font-size:16px}
+    .steps{grid-template-columns:1fr}
+    .act button,.act a{min-height:40px;display:inline-flex;align-items:center}
+    #files li{padding:11px 13px}
+    #files .fs{font-size:10.5px}
+    .act{gap:6px}
+  }
+  /* Touch devices get no hover lift, but they do get press feedback. */
+  @media (hover:none){ .act button:active{opacity:.72} }
+  @media (max-width:680px){
+    /* One layer, not two: a phone is the device most likely to be running an
+       upload over a metered connection, so it gets the cheapest version. */
+    .bg-rain.b{display:none}
+    .bg-rain.a{opacity:.34}
+    .bg-sweep{display:none}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;
+      transition-duration:.001ms!important;scroll-behavior:auto!important}
+    /* Kill the ambient motion outright -- it is decoration, not information.
+       The layers stay painted (at rest) so the page does not change shape. */
+    body::before,body::after{animation:none}
+    .bg-rain,.bg-sweep{animation:none}
+    .bg-rain.a{transform:translate3d(0,-118px,0)}
+    .bg-rain.b{transform:translate3d(0,-59px,0)}
+  }
